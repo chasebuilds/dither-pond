@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ridge Pond, a dithered three.js scene</title>
+<meta name="description" content="A farm pond in the hills rendered through an ordered dither pass. Drag the time of day from dawn to night, switch between Bayer and blue-noise dithering, tap the water for ripples.">
+<meta property="og:title" content="Ridge Pond">
+<meta property="og:description" content="A three.js pond scene through a Bayer and blue-noise dither pass, dawn to night.">
+<meta property="og:image" content="https://chasebuilds.github.io/dither-pond/docs/preview.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4'%3E%3Crect width='4' height='4' fill='%23181226'/%3E%3Crect x='0' y='0' width='1' height='1' fill='%23f2a764'/%3E%3Crect x='2' y='1' width='1' height='1' fill='%23f2a764'/%3E%3Crect x='1' y='2' width='1' height='1' fill='%23b2523a'/%3E%3Crect x='3' y='3' width='1' height='1' fill='%23b2523a'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="src/style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="c" aria-label="A pond in the hills with a jon boat and a dock. Drag to orbit, tap the water to make ripples."></canvas>
+
+<header class="title glass">
+  <h1>Ridge Pond</h1>
+  <p>three.js through a dither pass</p>
+</header>
+
+<button id="panelBtn" class="glass pill panel-btn" type="button" aria-controls="panel" aria-expanded="false">Dither</button>
+
+<aside id="panel" class="panel glass" aria-label="Dither settings">
+  <fieldset>
+    <legend>Threshold map</legend>
+    <div id="modes" class="seg"></div>
+  </fieldset>
+  <label class="row" for="px">Pixel size <output id="pxv">3</output></label>
+  <input id="px" type="range" min="1" max="8" step="1">
+  <fieldset>
+    <legend>Palette</legend>
+    <div class="seg">
+      <label><input type="radio" name="palette" value="ramp"><span>4-tone ramp</span></label>
+      <label><input type="radio" name="palette" value="rgb"><span>RGB, 3 levels</span></label>
+    </div>
+  </fieldset>
+  <div class="btns">
+    <button id="motion" class="pill" type="button" aria-pressed="true">Pause motion</button>
+    <button id="debugBtn" class="pill" type="button" aria-pressed="false">Debug</button>
+  </div>
+  <p class="hint">Drag to orbit. Tap the water for a ripple. Press D for the debug panel.</p>
+</aside>
+
+<pre id="debug" class="debug glass" hidden aria-live="off"></pre>
+
+<div class="timebar glass">
+  <div class="readout"><span id="phase">Dusk</span><span id="clock">7:24 pm</span></div>
+  <label class="sr" for="time">Time of day</label>
+  <input id="time" type="range" min="0" max="1000" step="1">
+  <div id="marks" class="marks"></div>
+</div>
+
+<div class="fallback glass">This scene needs WebGL2, which this browser does not have turned on.</div>
+<noscript><div class="fallback glass" style="display:block">This scene needs JavaScript and WebGL2.</div></noscript>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
