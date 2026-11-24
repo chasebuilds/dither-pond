@@ -4,6 +4,7 @@ import { buildScene } from './scene.js';
 import { POST_VERT, POST_FRAG } from './shaders.js';
 import { MODES, thresholdRanks, toBytes } from './dither.js';
 import { sample, clockLabel, clamp01, KEYS } from './time.js';
+import { SUBJECTS, DEFAULT_SUBJECTS } from './subjects.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -27,6 +28,11 @@ const state = {
   rgb: params.get('palette') === 'rgb',
   motion: !matchMedia('(prefers-reduced-motion: reduce)').matches && params.get('still') !== '1',
   debug: params.get('debug') === '1',
+  subjects: params.has('subjects')
+    ? params.get('subjects').split(',').filter((id) => SUBJECTS.some((s) => s.id === id))
+    : [...DEFAULT_SUBJECTS],
+  wind: clamp01(Number(params.get('wind') ?? 0.3)),
+  chop: clamp01(Number(params.get('chop') ?? 0.15)),
 };
 
 const world = buildScene();
@@ -37,10 +43,16 @@ controls.target.set(0.5, 1.2, 0);
 controls.enableDamping = true;
 controls.enablePan = false;
 controls.minDistance = 7;
-controls.maxDistance = 20;
+controls.maxDistance = 17;
 controls.minPolarAngle = 0.95;
 controls.maxPolarAngle = 1.5;
 controls.autoRotateSpeed = 0.25;
+const cam = params.get('cam')?.split(',').map(Number);
+if (cam?.length === 6 && cam.every(Number.isFinite)) {
+  camera.position.set(cam[0], cam[1], cam[2]);
+  controls.target.set(cam[3], cam[4], cam[5]);
+  controls.minDistance = Math.min(controls.minDistance, camera.position.distanceTo(controls.target));
+}
 controls.update();
 
 // Low-res target the scene renders into; the dither pass scales it up cell by cell.
@@ -125,6 +137,30 @@ function applyTime() {
 }
 
 // UI wiring.
+const subjectBox = $('subjects');
+subjectBox.innerHTML = SUBJECTS.map((s) => `<label><input type="checkbox" value="${s.id}"><span>${s.label}${s.note ? ` <small>${s.note}</small>` : ''}</span></label>`).join('')
+  + '<button type="button" id="empty" class="pill">Empty</button>';
+function applySubjects() {
+  world.setSubjects(state.subjects);
+  for (const box of subjectBox.querySelectorAll('input')) box.checked = state.subjects.includes(box.value);
+}
+subjectBox.addEventListener('change', () => {
+  state.subjects = [...subjectBox.querySelectorAll('input:checked')].map((b) => b.value);
+  applySubjects();
+});
+$('empty').addEventListener('click', () => { state.subjects = []; applySubjects(); });
+
+const words = (v, names) => names[Math.min(names.length - 1, Math.floor(v * names.length))];
+function applyEnv() {
+  world.setWind(state.wind);
+  world.setChop(state.chop);
+  $('wind').value = Math.round(state.wind * 100);
+  $('chop').value = Math.round(state.chop * 100);
+  $('windv').textContent = words(state.wind, ['still', 'light breeze', 'breezy', 'windy', 'gusty']);
+  $('chopv').textContent = words(state.chop, ['glassy', 'calm', 'rippled', 'choppy', 'rough']);
+}
+$('wind').addEventListener('input', (e) => { state.wind = e.target.value / 100; applyEnv(); });
+$('chop').addEventListener('input', (e) => { state.chop = e.target.value / 100; applyEnv(); });
 const timeInput = $('time');
 timeInput.addEventListener('input', () => { state.t = timeInput.value / 1000; applyTime(); });
 $('marks').innerHTML = KEYS.map((k) => `<button type="button" style="left:${k.t * 100}%" data-t="${k.t}">${k.name}</button>`).join('');
@@ -242,6 +278,8 @@ function frame(now) {
       `scene res  ${stats.target[0]} x ${stats.target[1]}`,
       `dither     ${MODES[state.mode].label}, ${state.rgb ? 'RGB' : 'ramp'}`,
       `motion     ${state.motion ? 'on' : 'off'}`,
+      `subjects   ${state.subjects.join(', ') || 'none'}`,
+      `wind/water ${state.wind.toFixed(2)} / ${state.chop.toFixed(2)}`,
     ].join('\n');
   }
   requestAnimationFrame(frame);
@@ -250,6 +288,8 @@ function frame(now) {
 new ResizeObserver(resize).observe(canvas);
 resize();
 applyDither();
+applySubjects();
+applyEnv();
 applyTime();
 applyMotion();
 applyDebug();
@@ -266,4 +306,9 @@ window.__pond = {
   setPixel(p) { state.px = p; pxInput.value = p; $('pxv').textContent = p; resize(); },
   setPalette(rgb) { state.rgb = rgb; applyDither(); },
   setMotion(on) { state.motion = on; applyMotion(); },
+  setSubjects(ids) { state.subjects = ids; applySubjects(); },
+  setWind(w) { state.wind = clamp01(w); applyEnv(); },
+  setChop(c) { state.chop = clamp01(c); applyEnv(); },
+  setCamera(p, t) { camera.position.set(...p); controls.target.set(...t); controls.minDistance = Math.min(7, camera.position.distanceTo(controls.target)); interacted = true; controls.autoRotate = false; controls.update(); },
+  advance(dt) { simTime += dt; },
 };

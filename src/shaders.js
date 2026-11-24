@@ -54,9 +54,13 @@ void main() {
 export const WATER_FRAG = /* glsl */ `
 ${SKY_CHUNK}
 #define DROPS 6
+#define SOURCES 6
 uniform float uTime;
-uniform vec2 uBoat;
+uniform vec4 uSrc[SOURCES];   // x, z, amplitude, inner radius
+uniform float uSrcK[SOURCES]; // wavenumber
 uniform vec4 uDrops[DROPS];
+uniform float uWind;
+uniform float uChop;
 uniform vec3 uWater;
 uniform vec3 uRidgeRefl;
 uniform vec3 uFog;
@@ -67,10 +71,15 @@ uniform float uLanternOn;
 varying vec3 vWorld;
 
 float height(vec2 p) {
-  // Rings that keep spreading from the boat as it rocks.
-  float d = length(p - uBoat);
-  float h = sin(d * 5.0 - uTime * 2.4) * 0.05 * exp(-d * 0.2) * smoothstep(0.9, 1.6, d);
-  // Drops (taps and fish rising): one ring front that travels out and fades.
+  float h = 0.0;
+  // Rings that keep spreading from anything floating or wading: boat, ducks, heron legs.
+  for (int i = 0; i < SOURCES; i++) {
+    vec4 s = uSrc[i];
+    if (s.z <= 0.0) continue;
+    float d = length(p - s.xy);
+    h += sin(d * uSrcK[i] - uTime * 2.4) * s.z * exp(-d * 0.22) * smoothstep(s.w * 0.75, s.w * 1.35, d);
+  }
+  // Drops (taps, fish rising, heron strikes, a deer drinking): one ring front that travels out and fades.
   for (int i = 0; i < DROPS; i++) {
     vec4 dr = uDrops[i];
     float age = uTime - dr.z;
@@ -79,8 +88,13 @@ float height(vec2 p) {
     float x = dd - age * 1.9;
     h += sin(x * 7.0) * exp(-x * x * 2.2) * dr.w * 0.07 * exp(-age * 0.4);
   }
-  // Light wind on the surface.
-  h += (sin(p.x * 1.6 + uTime * 0.8) + sin(p.y * 2.2 - uTime * 1.0) + sin((p.x + p.y) * 3.3 + uTime * 1.4)) * 0.005;
+  // Wind ripples: stronger and faster with the wind.
+  float wt = uTime * (0.8 + uWind * 1.6);
+  h += (sin(p.x * 1.6 + wt) + sin(p.y * 2.2 - wt * 1.2) + sin((p.x + p.y) * 3.3 + wt * 1.7)) * (0.002 + uWind * 0.012);
+  // Chop: short crossing waves plus a slow swell.
+  float ct = uTime * 1.9;
+  h += (sin(p.x * 4.1 + p.y * 1.3 + ct) + sin(p.y * 5.3 - p.x * 2.1 - ct * 1.3) + sin((p.x - p.y) * 6.7 + ct * 1.7)) * 0.011 * uChop;
+  h += sin(p.x * 0.7 + p.y * 0.4 + uTime * 0.9) * 0.05 * uChop;
   return h;
 }
 
@@ -112,12 +126,14 @@ export const FIREFLY_VERT = /* glsl */ `
 attribute float aPhase;
 uniform float uTime;
 uniform float uScale;
+uniform float uWind;
 varying float vGlow;
 void main() {
   vec3 p = position;
   p.x += sin(uTime * 0.6 + aPhase * 5.0) * 0.5;
   p.y += sin(uTime * 0.9 + aPhase * 3.0) * 0.25;
   p.z += cos(uTime * 0.5 + aPhase * 7.0) * 0.5;
+  p.x += uWind * (1.2 + sin(uTime * 0.7 + aPhase * 9.0) * 0.6);
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
   // Slow blink: mostly dark, then a short soft flash.
   vGlow = pow(max(sin(uTime * 1.3 + aPhase * 6.283), 0.0), 6.0);

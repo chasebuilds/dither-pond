@@ -1,11 +1,16 @@
-// Builds the ridge pond: sky, three ridge layers, bank with trees, pond water, a dock,
-// a jon boat with a lantern, cattails and fireflies. Everything is procedural; no model files.
+// Builds the ridge pond: sky, three ridge layers, bank with trees and grass, the pond and a creek,
+// a road with a plank bridge, a dock and cattails, plus the pickable subjects from subjects.js.
+// Everything is procedural; no model files.
 import * as THREE from 'three';
 import { rng } from './dither.js';
+import { gust } from './motion.js';
 import { SKY_VERT, SKY_FRAG, WATER_VERT, WATER_FRAG, FIREFLY_VERT, FIREFLY_FRAG } from './shaders.js';
+import { boat, heron, deer, ducks, bats, fireflies, cyclist, ROAD_R } from './subjects.js';
 
 export const FOG = { near: 14, far: 120 };
 const DROPS = 6;
+const SOURCES = 6;
+const CREEK = -Math.PI / 2; // the creek leaves the pond straight behind it, under the bridge
 
 // Pond outline radius at angle a: a lopsided farm pond, not a circle.
 export const pondRadius = (a) => 11 + 0.9 * Math.sin(3 * a + 1) + 0.5 * Math.sin(5 * a + 2) + 0.25 * Math.sin(9 * a);
@@ -51,6 +56,15 @@ function ground(mat) {
   return m;
 }
 
+// Keep scattered things off the road, the creek and the dock.
+const clear = (x, z) => {
+  const r = Math.hypot(x, z);
+  const onRoad = Math.abs(r - ROAD_R) < 1.1;
+  const onCreek = Math.abs(x) < 1.4 && z < 0 && r > 9;
+  const onDock = z > -1.6 && z < 1.6 && x < -8 && x > -15;
+  return !onRoad && !onCreek && !onDock;
+};
+
 function trees(mat) {
   const rand = rng(11);
   const count = 90;
@@ -59,63 +73,60 @@ function trees(mat) {
   const mesh = new THREE.InstancedMesh(cone, mat, count);
   const m = new THREE.Matrix4();
   const q = new THREE.Quaternion();
-  for (let i = 0; i < count; i++) {
+  let i = 0;
+  while (i < count) {
     const a = rand() * Math.PI * 2;
     const r = 27 + rand() * 24;
     const h = 1.6 + rand() * 2.6;
-    m.compose(new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r), q, new THREE.Vector3(h * 0.28, h, h * 0.28));
-    mesh.setMatrixAt(i, m);
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    if (!clear(x, z)) continue;
+    m.compose(new THREE.Vector3(x, 0, z), q, new THREE.Vector3(h * 0.28, h, h * 0.28));
+    mesh.setMatrixAt(i++, m);
   }
   return mesh;
 }
 
-function dock(woodMat) {
-  const g = new THREE.Group();
-  const a = Math.PI;
-  const shore = pondRadius(a);
-  const len = 5.2;
-  const x0 = -shore - 1.2;
-  const z = 0;
-  for (let i = 0; i < 14; i++) {
-    const plank = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.07, 1.5), woodMat);
-    plank.position.set(x0 + 0.2 + i * ((len + 1.2) / 14), 0.42, z);
-    plank.rotation.y = (i % 3 - 1) * 0.015;
-    g.add(plank);
-  }
-  for (const [dx, dz] of [[0.3, -0.7], [0.3, 0.7], [len * 0.55, -0.7], [len * 0.55, 0.7], [len + 1, -0.7], [len + 1, 0.7]]) {
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 1.1, 6), woodMat);
-    post.position.set(x0 + dx, 0.05, z + dz);
-    g.add(post);
-  }
-  return g;
+// Material whose vertices lean with the wind: bend grows with height (local y 0..1).
+function windy(mat, uniforms, amount) {
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = uniforms.uTime;
+    shader.uniforms.uWind = uniforms.uWind;
+    shader.vertexShader = `uniform float uTime;\nuniform float uWind;\n${shader.vertexShader}`.replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+      vec3 ip = instanceMatrix[3].xyz;
+      float bend = position.y * position.y * ${amount.toFixed(2)};
+      float wave = sin(uTime * (1.4 + uWind * 3.0) + ip.x * 0.6 + ip.z * 0.45);
+      transformed.x += (uWind * 0.5 + wave * (0.05 + uWind * 0.3)) * bend;
+      transformed.z += sin(uTime * 1.1 + ip.z * 0.8) * 0.04 * (0.3 + uWind) * bend;`,
+    );
+  };
+  return mat;
 }
 
-function jonBoat(paint, inside, metal) {
-  const g = new THREE.Group();
-  const add = (geo, mat, x, y, z, rx = 0, rz = 0) => {
-    const m = new THREE.Mesh(geo, mat);
-    m.position.set(x, y, z);
-    m.rotation.set(rx, 0, rz);
-    g.add(m);
-    return m;
-  };
-  // Flat bottom, square stern, raked bow: the shape of a small aluminum jon boat.
-  add(new THREE.BoxGeometry(3.0, 0.08, 1.2), inside, 0, 0.02, 0);
-  add(new THREE.BoxGeometry(3.0, 0.42, 0.06), paint, 0, 0.23, 0.6);
-  add(new THREE.BoxGeometry(3.0, 0.42, 0.06), paint, 0, 0.23, -0.6);
-  add(new THREE.BoxGeometry(0.06, 0.44, 1.26), paint, -1.5, 0.24, 0);
-  add(new THREE.BoxGeometry(0.75, 0.06, 1.2), inside, 1.78, 0.24, 0, 0, 0.62);
-  add(new THREE.BoxGeometry(0.08, 0.42, 1.24), paint, 2.08, 0.46, 0, 0, 0.62);
-  add(new THREE.BoxGeometry(0.32, 0.06, 1.16), inside, 0.35, 0.34, 0);
-  add(new THREE.BoxGeometry(0.32, 0.06, 1.16), inside, -0.85, 0.34, 0);
-  // Outboard motor on the transom.
-  add(new THREE.BoxGeometry(0.34, 0.36, 0.3), metal, -1.68, 0.56, 0);
-  add(new THREE.BoxGeometry(0.08, 0.7, 0.08), metal, -1.72, 0.15, 0);
-  // Lantern on a short pole at the bow.
-  add(new THREE.CylinderGeometry(0.025, 0.025, 0.9, 5), metal, 1.35, 0.7, 0.45);
-  const glassMat = new THREE.MeshBasicMaterial({ color: 0xffc46b });
-  const lamp = add(new THREE.SphereGeometry(0.11, 10, 8), glassMat, 1.35, 1.17, 0.45);
-  return { group: g, lamp, glassMat };
+function grass(mat) {
+  const rand = rng(17);
+  const count = 900;
+  const blade = new THREE.ConeGeometry(0.05, 1, 3);
+  blade.translate(0, 0.5, 0);
+  const mesh = new THREE.InstancedMesh(blade, mat, count);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const e = new THREE.Euler();
+  let i = 0;
+  while (i < count) {
+    const a = rand() * Math.PI * 2;
+    const r = pondRadius(a) + 0.2 + rand() ** 1.6 * 15;
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    if (!clear(x, z)) continue;
+    const h = 0.25 + rand() * 0.45;
+    q.setFromEuler(e.set((rand() - 0.5) * 0.3, rand() * 6.28, (rand() - 0.5) * 0.3));
+    m.compose(new THREE.Vector3(x, 0.04, z), q, new THREE.Vector3(1, h, 1));
+    mesh.setMatrixAt(i++, m);
+  }
+  return mesh;
 }
 
 function cattails(stalkMat, headMat) {
@@ -131,7 +142,7 @@ function cattails(stalkMat, headMat) {
   cluster(-0.55, 0.5, 70, 1.4);
   cluster(2.6, 2.95, 30, 1.0);
   cluster(3.35, 3.8, 30, 1.0);
-  cluster(-2.2, -1.6, 26, 1.0);
+  cluster(-1.62, -1.4, 14, 1.0);
   const stalkGeo = new THREE.CylinderGeometry(0.018, 0.026, 1, 4);
   stalkGeo.translate(0, 0.5, 0);
   const headGeo = new THREE.CylinderGeometry(0.055, 0.055, 0.3, 6);
@@ -141,45 +152,71 @@ function cattails(stalkMat, headMat) {
   const q = new THREE.Quaternion();
   const e = new THREE.Euler();
   const up = new THREE.Vector3();
-  const update = (time) => {
+  const pos = new THREE.Vector3();
+  const one = new THREE.Vector3(1, 1, 1);
+  const size = new THREE.Vector3();
+  const update = (time, wind) => {
     spots.forEach((s, i) => {
-      const sway = s.lean + Math.sin(time * 1.1 + s.ph) * 0.045;
-      q.setFromEuler(e.set(sway * 0.6, 0, sway));
-      m.compose(new THREE.Vector3(s.x, -0.1, s.z), q, new THREE.Vector3(1, s.h, 1));
+      const sway = s.lean + wind * 0.35 + Math.sin(time * (1.1 + wind * 2.5) + s.ph) * (0.03 + wind * 0.16);
+      q.setFromEuler(e.set(sway * 0.3, 0, -sway));
+      m.compose(pos.set(s.x, -0.1, s.z), q, size.set(1, s.h, 1));
       stalks.setMatrixAt(i, m);
       up.set(0, s.h * 0.82, 0).applyQuaternion(q);
-      m.compose(new THREE.Vector3(s.x + up.x, -0.1 + up.y, s.z + up.z), q, new THREE.Vector3(1, 1, 1));
+      m.compose(pos.set(s.x + up.x, -0.1 + up.y, s.z + up.z), q, one);
       heads.setMatrixAt(i, m);
     });
     stalks.instanceMatrix.needsUpdate = true;
     heads.instanceMatrix.needsUpdate = true;
   };
-  update(0);
+  update(0, 0);
   return { stalks, heads, update };
 }
 
-function fireflies(count = 70) {
-  const rand = rng(31);
-  const pos = new Float32Array(count * 3);
-  const phase = new Float32Array(count);
-  for (let i = 0; i < count; i++) {
-    const a = rand() * Math.PI * 2;
-    const r = pondRadius(a) + (rand() - 0.3) * 4;
-    pos.set([Math.cos(a) * r, 0.4 + rand() * 1.8, Math.sin(a) * r], i * 3);
-    phase[i] = rand();
+function dock(woodMat) {
+  const g = new THREE.Group();
+  const shore = pondRadius(Math.PI);
+  const len = 5.2;
+  const x0 = -shore - 1.2;
+  for (let i = 0; i < 14; i++) {
+    const plank = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.07, 1.5), woodMat);
+    plank.position.set(x0 + 0.2 + i * ((len + 1.2) / 14), 0.42, 0);
+    plank.rotation.y = ((i % 3) - 1) * 0.015;
+    g.add(plank);
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  g.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
-  const mat = new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 }, uNight: { value: 0 }, uScale: { value: 160 } },
-    vertexShader: FIREFLY_VERT,
-    fragmentShader: FIREFLY_FRAG,
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  });
-  return new THREE.Points(g, mat);
+  for (const [dx, dz] of [[0.3, -0.7], [0.3, 0.7], [len * 0.55, -0.7], [len * 0.55, 0.7], [len + 1, -0.7], [len + 1, 0.7]]) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 1.1, 6), woodMat);
+    post.position.set(x0 + dx, 0.05, dz);
+    g.add(post);
+  }
+  return g;
+}
+
+function road(gravel, woodMat) {
+  const g = new THREE.Group();
+  const ring = new THREE.Mesh(new THREE.RingGeometry(ROAD_R - 0.6, ROAD_R + 0.6, 160, 1), gravel);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.075;
+  g.add(ring);
+  // Plank bridge where the road crosses the creek.
+  const bridge = new THREE.Group();
+  bridge.position.set(0, 0, -ROAD_R);
+  for (let i = 0; i < 9; i++) {
+    const plank = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.06, 1.5), woodMat);
+    plank.position.set(-1.25 + i * 0.31, 0.32, 0);
+    bridge.add(plank);
+  }
+  for (const z of [-0.72, 0.72]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.06, 0.06), woodMat);
+    rail.position.set(0, 0.75, z);
+    bridge.add(rail);
+    for (const x of [-1.3, 0, 1.3]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 0.08), woodMat);
+      post.position.set(x, 0.55, z);
+      bridge.add(post);
+    }
+  }
+  g.add(bridge);
+  return g;
 }
 
 export function buildScene() {
@@ -205,74 +242,88 @@ export function buildScene() {
   const ridgeMats = [0, 1, 2].map(() => new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
   scene.add(ridge(62, 4, 9, 3, ridgeMats[0]), ridge(95, 7, 15, 5, ridgeMats[1]), ridge(140, 10, 24, 9, ridgeMats[2]));
 
+  const windUniforms = { uTime: { value: 0 }, uWind: { value: 0.3 } };
   const groundMat = new THREE.MeshLambertMaterial();
-  const treeMat = new THREE.MeshLambertMaterial({ flatShading: true });
-  scene.add(ground(groundMat), trees(treeMat));
+  const treeMat = windy(new THREE.MeshLambertMaterial({ flatShading: true }), windUniforms, 0.08);
+  const grassMat = windy(new THREE.MeshLambertMaterial(), windUniforms, 1);
+  const woodMat = new THREE.MeshLambertMaterial({ color: 0x8a6a4a });
+  const gravelMat = new THREE.MeshLambertMaterial({ color: 0x9a8f7c });
+  scene.add(ground(groundMat), trees(treeMat), grass(grassMat), dock(woodMat), road(gravelMat, woodMat));
 
-  const water = new THREE.Mesh(
-    new THREE.PlaneGeometry(40, 40),
-    new THREE.ShaderMaterial({
-      uniforms: {
-        ...skyUniforms,
-        uTime: { value: 0 },
-        uBoat: { value: new THREE.Vector2() },
-        uDrops: { value: Array.from({ length: DROPS }, () => new THREE.Vector4(0, 0, -99, 0)) },
-        uWater: { value: new THREE.Color() },
-        uRidgeRefl: { value: new THREE.Color() },
-        uFog: { value: new THREE.Color() },
-        uFogNear: { value: FOG.near },
-        uFogFar: { value: FOG.far },
-        uLantern: { value: new THREE.Vector3() },
-        uLanternOn: { value: 0 },
-      },
-      vertexShader: WATER_VERT,
-      fragmentShader: WATER_FRAG,
-    }),
-  );
+  const waterMat = new THREE.ShaderMaterial({
+    uniforms: {
+      ...skyUniforms,
+      uTime: { value: 0 },
+      uSrc: { value: Array.from({ length: SOURCES }, () => new THREE.Vector4()) },
+      uSrcK: { value: new Array(SOURCES).fill(5) },
+      uDrops: { value: Array.from({ length: DROPS }, () => new THREE.Vector4(0, 0, -99, 0)) },
+      uWind: { value: 0.3 },
+      uChop: { value: 0.2 },
+      uWater: { value: new THREE.Color() },
+      uRidgeRefl: { value: new THREE.Color() },
+      uFog: { value: new THREE.Color() },
+      uFogNear: { value: FOG.near },
+      uFogFar: { value: FOG.far },
+      uLantern: { value: new THREE.Vector3() },
+      uLanternOn: { value: 0 },
+    },
+    vertexShader: WATER_VERT,
+    fragmentShader: WATER_FRAG,
+  });
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), waterMat);
   water.rotation.x = -Math.PI / 2;
   scene.add(water);
-
-  const woodMat = new THREE.MeshLambertMaterial({ color: 0x8a6a4a });
-  scene.add(dock(woodMat));
-
-  const paint = new THREE.MeshLambertMaterial({ color: 0x3f5a3a });
-  const inside = new THREE.MeshLambertMaterial({ color: 0x8c9290 });
-  const metal = new THREE.MeshLambertMaterial({ color: 0x2c2f33 });
-  const boat = jonBoat(paint, inside, metal);
-  boat.group.position.set(1.8, 0, -1.2);
-  boat.group.rotation.y = 0.5;
-  scene.add(boat.group);
-  const lantern = new THREE.PointLight(0xffb45a, 0, 9, 1.6);
-  scene.add(lantern);
+  // The creek: a strip of the same water running from the pond out under the bridge.
+  const creekStart = pondRadius(CREEK) - 0.6;
+  const creek = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 34 - creekStart), waterMat);
+  creek.rotation.x = -Math.PI / 2;
+  creek.position.set(0, 0.07, -(creekStart + (34 - creekStart) / 2));
+  scene.add(creek);
 
   const reeds = cattails(new THREE.MeshLambertMaterial({ color: 0x5d7a3a }), new THREE.MeshLambertMaterial({ color: 0x5a3a22 }));
   scene.add(reeds.stalks, reeds.heads);
 
-  const flies = fireflies();
-  scene.add(flies);
+  const subjects = {
+    boat: boat(),
+    ducks: ducks(),
+    heron: heron(pondRadius),
+    deer: deer(pondRadius),
+    cyclist: cyclist(),
+    bats: bats(),
+    fireflies: fireflies(pondRadius, FIREFLY_VERT, FIREFLY_FRAG),
+  };
+  for (const s of Object.values(subjects)) scene.add(s.group);
 
   const hemi = new THREE.HemisphereLight(0xffffff, 0x334422, 1);
   const sun = new THREE.DirectionalLight(0xffffff, 1);
   scene.add(hemi, sun);
 
-  const drops = water.material.uniforms.uDrops.value;
+  const u = waterMat.uniforms;
   let nextDrop = 0;
   const tmp = new THREE.Color();
-  const lampWorld = new THREE.Vector3();
+  const env = { wind: 0.3, chop: 0.2, night: 0 };
+  const active = new Set();
 
-  return {
+  const api = {
     scene,
-    water,
-    // Ripple from a tap or a fish at world (x, z).
+    subjects,
+    env,
     drop(x, z, time, strength = 1) {
-      drops[nextDrop].set(x, z, time, strength);
+      u.uDrops.value[nextDrop].set(x, z, time, strength);
       nextDrop = (nextDrop + 1) % DROPS;
     },
     insidePond(x, z) {
       return Math.hypot(x, z) < pondRadius(Math.atan2(z, x)) - 0.3;
     },
-    // Apply one sampled time of day (see time.js) to every material and light.
+    setSubjects(ids) {
+      active.clear();
+      for (const id of ids) if (subjects[id]) active.add(id);
+      for (const [id, s] of Object.entries(subjects)) s.group.visible = active.has(id);
+      // Rings left by a subject that just left would hang on a frozen frame; start the water clean.
+      for (const d of u.uDrops.value) d.set(0, 0, -99, 0);
+    },
     setLook(look) {
+      env.night = look.night;
       skyUniforms.uSkyTop.value.setRGB(...look.skyTop);
       skyUniforms.uSkyHorizon.value.setRGB(...look.skyHorizon);
       skyUniforms.uLightDir.value.set(...look.light);
@@ -281,44 +332,45 @@ export function buildScene() {
       skyUniforms.uMoon.value = look.moon;
       skyUniforms.uNight.value = look.night;
       scene.fog.color.setRGB(...look.fog);
-      const u = water.material.uniforms;
       u.uWater.value.setRGB(...look.water);
       u.uFog.value.setRGB(...look.fog);
       tmp.setRGB(...look.ridge).lerp(scene.fog.color, 0.35);
       u.uRidgeRefl.value.copy(tmp);
       ridgeMats.forEach((m, i) => m.color.setRGB(...look.ridge).lerp(scene.fog.color, 0.12 + i * 0.12));
       groundMat.color.setRGB(...look.ground);
+      grassMat.color.setRGB(...look.ground).multiplyScalar(1.25);
       treeMat.color.setRGB(...look.ground).multiplyScalar(0.7);
+      gravelMat.color.setRGB(...look.ground).lerp(tmp.setRGB(0.62, 0.58, 0.5), 0.6);
       hemi.color.setRGB(...look.skyTop);
       hemi.groundColor.setRGB(...look.ground);
       hemi.intensity = look.ambient * 2.2;
       sun.color.setRGB(...look.lightColor);
       sun.intensity = look.intensity;
       sun.position.set(...look.light).multiplyScalar(50);
-      const lampOn = THREE.MathUtils.smoothstep(look.night, 0.25, 0.9);
-      lantern.intensity = lampOn * 6;
-      u.uLanternOn.value = lampOn;
-      boat.glassMat.color.setRGB(0.25, 0.22, 0.18).lerp(tmp.setRGB(1, 0.8, 0.45), lampOn);
-      flies.material.uniforms.uNight.value = THREE.MathUtils.smoothstep(look.night, 0.5, 1);
     },
+    setWind(w) { env.wind = w; },
+    setChop(c) { env.chop = c; },
     // Advance animation to `time` seconds (frozen when motion is off).
     tick(time) {
-      const b = boat.group;
-      b.position.y = Math.sin(time * 1.2) * 0.035 - 0.05;
-      b.rotation.z = Math.sin(time * 1.0) * 0.03;
-      b.rotation.x = Math.sin(time * 0.8 + 1) * 0.02;
-      b.updateMatrixWorld();
-      boat.lamp.getWorldPosition(lampWorld);
-      lantern.position.copy(lampWorld);
-      const u = water.material.uniforms;
+      const wind = gust(env.wind, time);
+      windUniforms.uTime.value = time;
+      windUniforms.uWind.value = wind;
       u.uTime.value = time;
-      u.uBoat.value.set(b.position.x, b.position.z);
-      u.uLantern.value.copy(lampWorld);
-      flies.material.uniforms.uTime.value = time;
-      reeds.update(time);
+      u.uWind.value = wind;
+      u.uChop.value = env.chop;
+      reeds.update(time, wind);
+      const ctx = { time, wind, chop: env.chop, night: env.night, drop: (x, z, s) => api.drop(x, z, time, s) };
+      const sources = [];
+      for (const id of active) sources.push(...subjects[id].update(ctx));
+      for (let i = 0; i < SOURCES; i++) {
+        const s = sources[i];
+        if (s) { u.uSrc.value[i].set(s[0], s[1], s[2], s[3]); u.uSrcK.value[i] = s[4]; } else u.uSrc.value[i].set(0, 0, 0, 0);
+      }
+      const b = subjects.boat;
+      u.uLantern.value.copy(b.lampWorld);
+      u.uLanternOn.value = active.has('boat') ? b.lanternOn(env.night) : 0;
     },
-    setPointScale(s) {
-      flies.material.uniforms.uScale.value = s;
-    },
+    setPointScale(s) { subjects.fireflies.setScale(s); },
   };
+  return api;
 }

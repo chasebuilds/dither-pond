@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ridge Pond, a dithered three.js scene</title>
-<meta name="description" content="A farm pond in the hills rendered through an ordered dither pass. Drag the time of day from dawn to night, switch between Bayer and blue-noise dithering, tap the water for ripples.">
+<meta name="description" content="A farm pond in the hills rendered through an ordered dither pass. Pick what is on the water (boat, ducks, heron, deer, cyclist, bats, fireflies), set the wind and the chop, drag the time of day from dawn to night, and switch between Bayer and blue-noise dithering.">
 <meta property="og:title" content="Ridge Pond">
 <meta property="og:description" content="A three.js pond scene through a Bayer and blue-noise dither pass, dawn to night.">
 <meta property="og:image" content="https://chasebuilds.github.io/dither-pond/docs/preview.png">
@@ -18,16 +18,24 @@
 </script>
 </head>
 <body>
-<canvas id="c" aria-label="A pond in the hills with a jon boat and a dock. Drag to orbit, tap the water to make ripples."></canvas>
+<canvas id="c" aria-label="A pond in the hills with a dock, a creek and a road. Drag to orbit, tap the water to make ripples."></canvas>
 
 <header class="title glass">
   <h1>Ridge Pond</h1>
   <p>three.js through a dither pass</p>
 </header>
 
-<button id="panelBtn" class="glass pill panel-btn" type="button" aria-controls="panel" aria-expanded="false">Dither</button>
+<button id="panelBtn" class="glass pill panel-btn" type="button" aria-controls="panel" aria-expanded="false">Scene and dither</button>
 
-<aside id="panel" class="panel glass" aria-label="Dither settings">
+<aside id="panel" class="panel glass" aria-label="Scene and dither settings">
+  <fieldset>
+    <legend>Subjects <span class="legend-note">mix any</span></legend>
+    <div id="subjects" class="seg"></div>
+  </fieldset>
+  <label class="row" for="wind">Wind <output id="windv"></output></label>
+  <input id="wind" type="range" min="0" max="100" step="1">
+  <label class="row" for="chop">Water <output id="chopv"></output></label>
+  <input id="chop" type="range" min="0" max="100" step="1">
   <fieldset>
     <legend>Threshold map</legend>
     <div id="modes" class="seg"></div>

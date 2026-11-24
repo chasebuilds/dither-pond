@@ -121,6 +121,37 @@ try {
     await context.close();
   }
 
+  // 2b. Subjects: each one adds pixels to the still frame, Empty removes them all, and wind and water change the frame.
+  {
+    const { page, errors, context } = await open('?t=0.34&still=1&mode=off&px=1&subjects=');
+    const empty = await pixels(page);
+    const night = { bats: 0.9, fireflies: 1 };
+    for (const id of ['boat', 'ducks', 'heron', 'deer', 'cyclist', 'bats', 'fireflies']) {
+      await page.evaluate(([s, t]) => { window.__pond.setTime(t); window.__pond.setSubjects([]); }, [id, night[id] ?? 0.34]);
+      const base = await pixels(page);
+      await page.evaluate((s) => window.__pond.setSubjects([s]), id);
+      const withIt = await pixels(page);
+      const d = diff(base, withIt);
+      check(d > 0.0004, `subject ${id} shows up (${(d * 100).toFixed(2)}% of pixels change)`);
+    }
+    await page.evaluate(() => { window.__pond.setTime(0.34); window.__pond.setSubjects(['boat', 'ducks', 'heron']); });
+    const mixed = await pixels(page);
+    // The UI is hidden for pixel reads, so press the Empty button through the DOM.
+    await page.evaluate(() => document.getElementById('empty').click());
+    const cleared = await pixels(page);
+    check(diff(mixed, empty) > 0.001 && diff(cleared, empty) === 0, 'mixing works and Empty clears every subject');
+    await page.evaluate(() => { window.__pond.setWind(0); window.__pond.setChop(0); });
+    const calm = await pixels(page);
+    await page.evaluate(() => window.__pond.setWind(1));
+    const windy = await pixels(page);
+    await page.evaluate(() => { window.__pond.setWind(0); window.__pond.setChop(1); });
+    const choppy = await pixels(page);
+    check(diff(calm, windy) > 0.01, `wind bends grass and ruffles water (${(diff(calm, windy) * 100).toFixed(1)}% of pixels change)`);
+    check(diff(calm, choppy) > 0.01, `water slider adds chop (${(diff(calm, choppy) * 100).toFixed(1)}% of pixels change)`);
+    check(errors.length === 0, 'subjects: no page errors');
+    await context.close();
+  }
+
   // 3. Motion runs by default and stops under prefers-reduced-motion.
   {
     const { page, context } = await open('?t=0.6');

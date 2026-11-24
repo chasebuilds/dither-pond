@@ -113,3 +113,25 @@ test('clock labels', () => {
   assert.equal(clockLabel(0), '12:00 am');
   assert.equal(clockLabel(23.999), '12:00 am');
 });
+
+test('cyclist legs keep their length through a full pedal turn', async () => {
+  const { knee } = await import('../src/motion.js');
+  const hip = [0.98, -0.12];
+  for (let a = 0; a < Math.PI * 2; a += 0.1) {
+    const foot = [0.34 + Math.sin(a) * 0.17, 0.02 + Math.cos(a) * 0.17];
+    const [ky, kz] = knee(hip[0], hip[1], foot[0], foot[1], 0.5, 0.5);
+    assert.ok(Math.abs(Math.hypot(ky - hip[0], kz - hip[1]) - 0.5) < 1e-6, 'thigh length');
+    assert.ok(Math.abs(Math.hypot(ky - foot[0], kz - foot[1]) - 0.5) < 1e-6, 'shin length');
+    assert.ok(kz > Math.min(hip[1], foot[1]), 'knee bends forward');
+  }
+});
+
+test('head cycles go fully down inside the drink window and fully up outside it', async () => {
+  const { headCycle, gust } = await import('../src/motion.js');
+  assert.equal(headCycle(6, 11, 0, 5, 8.6, 1.1).pose, 1);
+  assert.equal(headCycle(6, 11, 0, 5, 8.6, 1.1).down, true);
+  assert.equal(headCycle(1, 11, 0, 5, 8.6, 1.1).pose, 0);
+  assert.equal(headCycle(12, 11, 0, 5, 8.6, 1.1).pose, 0, 'wraps every period');
+  for (let t = 0; t < 60; t += 0.5) assert.ok(gust(0.5, t) >= 0 && gust(0.5, t) <= 0.5 * 1.35 + 1e-9);
+  assert.equal(gust(0, 10), 0, 'no wind means no gusts');
+});
