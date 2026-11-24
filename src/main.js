@@ -95,6 +95,8 @@ function resize() {
   post.uniforms.uCell.value = cell;
   post.uniforms.uTarget.value.set(tw, th);
   camera.aspect = w / h;
+  // Portrait phones get a wider lens so the boat and both banks stay in frame.
+  camera.fov = camera.aspect < 1 ? 62 : 42;
   camera.updateProjectionMatrix();
   world.setPointScale(150 * (th / 400));
 }
