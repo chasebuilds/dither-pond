@@ -105,3 +105,11 @@ URL options for links and screenshots: `?t=0.76` (time, 0 to 1), `&subjects=boat
 Everything in the scene is procedural. There are no model or texture files.
 
 MIT license. Built by Chase Builds.
+
+## More from Chase Builds
+
+- **[window-hero](https://github.com/chasebuilds/window-hero)**: Your homepage becomes a window: the 3D scene shifts as the visitor moves. Camera optional and on-device only. ([live demo](https://chasebuilds.github.io/window-hero/))
+- **[notebook-shelf](https://github.com/chasebuilds/notebook-shelf)**: A shelf of notebooks that open in 3D. Great for portfolios, menus and catalogs. ([live demo](https://chasebuilds.github.io/notebook-shelf/))
+- **[liquid-logo-studio](https://github.com/chasebuilds/liquid-logo-studio)**: Turns any logo into animated liquid chrome or gold, ready to export or embed. ([live demo](https://chasebuilds.github.io/liquid-logo-studio/))
+
+[All projects, sorted by industry](https://github.com/chasebuilds) · [chasebuilds.github.io](https://chasebuilds.github.io)
