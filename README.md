@@ -7,7 +7,7 @@ A farm pond in the hills, rendered with three.js and then passed through a full-
 
 **Live demo: https://chasebuilds.github.io/dither-pond/**
 
-![The slider sweeping from dawn to night](docs/sweep.gif)
+![Recorded from the live demo: the time slider moving from morning to night with the boat, ducks, heron, bats and fireflies switched on](docs/preview.webp)
 
 | Dawn | Day | Golden | Night |
 |---|---|---|---|
@@ -26,6 +26,8 @@ Every subject is built in code from three.js primitives (spheres, cylinders, box
 |---|---|---|---|
 | ![cyclist](docs/subject-cyclist.png) | ![bats](docs/subject-bats.png) | ![fireflies](docs/subject-fireflies.png) | ![empty](docs/subject-empty-windy.png) |
 | Rides the road around the pond and over the creek bridge; wheels and pedals turn, legs solve to the pedals | Flap and loop over the water from dusk on | Blink over the banks at night and drift with the wind | No subjects, wind at full and water choppy |
+
+![The slider sweeping from dawn to night](docs/sweep.gif)
 
 ## Controls
 
