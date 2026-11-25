@@ -195,6 +195,7 @@ const debugEl = $('debug');
 const debugBtn = $('debugBtn');
 function applyDebug() {
   debugEl.hidden = !state.debug;
+  frameNo = 9; // fill the panel on the next frame, not ten frames later
   debugBtn.setAttribute('aria-pressed', String(state.debug));
 }
 debugBtn.addEventListener('click', () => { state.debug = !state.debug; applyDebug(); });

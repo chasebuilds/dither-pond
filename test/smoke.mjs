@@ -175,10 +175,12 @@ try {
   {
     const { page, context } = await open('?t=0.6');
     await page.keyboard.press('d');
-    await page.waitForTimeout(1300);
+    // Wait for the panel's first write instead of a fixed delay: under SwiftShader a frame can
+    // take hundreds of ms, so a fixed 1.3 s wait could read the panel before it had any text.
+    await page.waitForFunction(() => /fps\s+\d+/.test(document.querySelector('#debug')?.textContent || ''), null, { timeout: 15000 }).catch(() => {});
     const text = await page.locator('#debug').innerText();
     const fps = Number(text.match(/fps\s+(\d+)/)?.[1]);
-    check(await page.locator('#debug').isVisible() && fps > 0, `debug panel shows fps (${fps} under SwiftShader)`);
+    check(await page.locator('#debug').isVisible() && Number.isFinite(fps) && fps > 0, `debug panel shows fps (${fps} under SwiftShader)`);
     await context.close();
   }
 
